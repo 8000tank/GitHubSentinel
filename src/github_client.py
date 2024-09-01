@@ -12,14 +12,12 @@ class GitHubClient:
         self.headers = {'Authorization': f'token {self.token}'}  # 设置HTTP头部认证信息
 
     def fetch_updates(self, repo, since=None, until=None):
-        # 获取指定仓库的更新，可以指定开始和结束日期
-        updates = {
+        return {
             'commits': self.fetch_commits(repo, since, until),  # 获取提交记录
             'issues': self.fetch_issues(repo, since, until),  # 获取问题
             # 获取拉取请求
-            'pull_requests': self.fetch_pull_requests(repo, since, until)
+            'pull_requests': self.fetch_pull_requests(repo, since, until),
         }
-        return updates
 
     def fetch_commits(self, repo, since=None, until=None):
         LOG.debug(f"准备获取 {repo} 的 Commits")
@@ -34,12 +32,14 @@ class GitHubClient:
             response = requests.get(
                 url, headers=self.headers, params=params, timeout=10)
             response.raise_for_status()  # 检查请求是否成功
-            return response.json()  # 返回JSON格式的数据
+
+            # by wy：until过滤法一，返回后过滤
+            prs = response.json()
+            return self.filter_prs_by_until(prs, until)
         except Exception as e:
-            LOG.error(f"从 {repo} 获取 Commits 失败：{str(e)}")
-            LOG.error(
-                f"响应详情：{response.text if 'response' in locals() else '无响应数据可用'}")
-            return []  # Handle failure case
+            return self.log_error(
+                repo, ' 获取 Commits 失败：', e, response
+            )
 
     def fetch_issues(self, repo, since=None, until=None):
         LOG.debug(f"准备获取 {repo} 的 Issues。")
@@ -49,19 +49,14 @@ class GitHubClient:
             response = requests.get(
                 url, headers=self.headers, params=params, timeout=10)
             response.raise_for_status()
-            prs = response.json()
 
             # by wy：until过滤法一，返回后过滤
-            if until:
-                until_datetime = datetime.strptime(until, '%Y-%m-%dT%H:%M:%S')
-                prs = [pr for pr in prs if datetime.strptime(
-                    pr['closed_at'], '%Y-%m-%dT%H:%M:%SZ') <= until_datetime]
-            return prs
+            prs = response.json()
+            return self.filter_prs_by_until(prs, until)
         except Exception as e:
-            LOG.error(f"从 {repo} 获取 Issues 失败：{str(e)}")
-            LOG.error(
-                f"响应详情：{response.text if 'response' in locals() else '无响应数据可用'}")
-            return []
+            return self.log_error(
+                repo, ' 获取 Issues 失败：', e, response
+            )
 
     def fetch_pull_requests(self, repo, since=None, until=None):
         LOG.debug(f"准备获取 {repo} 的 Pull Requests。")
@@ -71,12 +66,34 @@ class GitHubClient:
             response = requests.get(
                 url, headers=self.headers, params=params, timeout=10)
             response.raise_for_status()  # 确保成功响应
-            return response.json()
+
+            # by wy：until过滤法一，返回后过滤
+            prs = response.json()
+            return self.filter_prs_by_until(prs, until)
         except Exception as e:
-            LOG.error(f"从 {repo} 获取 Pull Requests 失败：{str(e)}")
-            LOG.error(
-                f"响应详情：{response.text if 'response' in locals() else '无响应数据可用'}")
-            return []
+            return self.log_error(
+                repo, ' 获取 Pull Requests 失败：', e, response
+            )
+
+    def log_error(self, repo, arg1, e, response):
+        LOG.error(f"从 {repo}{arg1}{str(e)}")
+        LOG.error(
+            f"响应详情：{response.text if 'response' in locals() else '无响应数据可用'}")
+        return []
+
+    def filter_prs_by_until(self, prs, until):
+        """
+        过滤PR列表，返回在指定时间之前关闭的PR。
+
+        :param prs: PR列表，包含字典，每个字典代表一个PR。
+        :param until: 截止日期，格式为'%Y-%m-%dT%H:%M:%S'。
+        :return: 过滤后的PR列表。
+        """
+        if until:
+            until_datetime = datetime.strptime(until, '%Y-%m-%dT%H:%M:%S')
+            prs = [pr for pr in prs if datetime.strptime(
+                pr['closed_at'], '%Y-%m-%dT%H:%M:%SZ') <= until_datetime]
+        return prs
 
     # by wy：until过滤法二，分页时过滤
 
@@ -152,6 +169,28 @@ class GitHubClient:
         with open(file_path, 'w') as file:
             file.write(f"# Progress for {repo} ({since} to {today})\n\n")
             file.write(f"\n## Issues Closed in the Last {days} Days\n")
+            for issue in updates['issues']:  # 写入在指定日期内关闭的问题
+                file.write(f"- {issue['title']} #{issue['number']}\n")
+
+        LOG.info(f"[{repo}]项目最新进展文件生成： {file_path}")  # 记录日志
+        return file_path
+
+    def export_progress_by_date_range_until(self, repo, since, until):
+        # today = date.today()  # 获取当前日期
+        updates = self.fetch_updates(
+            repo, since=since, until=until)  # 获取指定日期范围内的更新
+
+        repo_dir = os.path.join(
+            'daily_progress', repo.replace("/", "_"))  # 构建目录路径
+        os.makedirs(repo_dir, exist_ok=True)  # 确保目录存在
+
+        # 更新文件名以包含日期范围
+        date_str = f"{since}_to_{until}"
+        file_path = os.path.join(repo_dir, f'{date_str}.md')  # 构建文件路径
+
+        with open(file_path, 'w') as file:
+            file.write(f"# Progress for {repo} ({since} to {until})\n\n")
+            # file.write(f"\n## Issues Closed in the Last {days} Days\n")
             for issue in updates['issues']:  # 写入在指定日期内关闭的问题
                 file.write(f"- {issue['title']} #{issue['number']}\n")
 

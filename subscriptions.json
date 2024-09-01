@@ -2,5 +2,7 @@
     "ollama/ollama",
     "vllm-project/vllm",
     "DjangoPeng/GitHubSentinel",
-    "langchain-ai/langchain"
+    "langchain-ai/langchain",
+    "8000tank/GitHubSentinel",
+    "DjangoPeng/openai-quickstart"
 ]
