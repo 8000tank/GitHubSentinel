@@ -25,7 +25,7 @@ def github_job(subscription_manager, github_client, report_generator, notifier, 
         # 遍历每个订阅的仓库，执行以下操作
         markdown_file_path = github_client.export_progress_by_date_range(repo, days)
         # 从Markdown文件自动生成进展简报
-        report, report_file_path = report_generator.generate_report_by_date_range(markdown_file_path, days)
+        report, _ = report_generator.generate_daily_report(markdown_file_path)
         notifier.notify(repo, report)
     LOG.info(f"[定时任务执行完毕]")
 
@@ -37,7 +37,7 @@ def main():
     config = Config()  # 创建配置实例
     github_client = GitHubClient(config.github_token)  # 创建GitHub客户端实例
     notifier = Notifier(config.email)  # 创建通知器实例
-    llm = LLM()  # 创建语言模型实例
+    llm = LLM(config)  # 创建语言模型实例
     report_generator = ReportGenerator(llm)  # 创建报告生成器实例
     subscription_manager = SubscriptionManager(config.subscriptions_file)  # 创建订阅管理器实例
 
