@@ -4,12 +4,24 @@ import argparse
 
 import argparse  # 导入argparse库，用于处理命令行参数解析
 
+
 class CommandHandler:
-    def __init__(self, github_client, subscription_manager, report_generator):
-        # 初始化CommandHandler，接收GitHub客户端、订阅管理器和报告生成器
-        self.github_client = github_client
+    def __init__(self, subscription_manager, github_client, report_generator, hackernews_client, notifier=None):
+        """
+        初始化命令处理器
+
+        Args:
+            subscription_manager: 订阅管理器实例
+            github_client: GitHub客户端实例
+            report_generator: 报告生成器实例
+            hackernews_client: HackerNews客户端实例
+            notifier: 通知器实例（可选）
+        """
         self.subscription_manager = subscription_manager
+        self.github_client = github_client
         self.report_generator = report_generator
+        self.hackernews_client = hackernews_client
+        self.notifier = notifier
         self.parser = self.create_parser()  # 创建命令行解析器
 
     def create_parser(self):
@@ -50,6 +62,10 @@ class CommandHandler:
         parser_generate.add_argument('file', type=str, help='The markdown file to generate report from')
         parser_generate.set_defaults(func=self.generate_daily_report)
 
+        # 添加 news 命令
+        news_parser = subparsers.add_parser('news', help='Generate HackerNews report')
+        news_parser.set_defaults(func=self.generate_news_report)
+
         # 帮助命令
         parser_help = subparsers.add_parser('help', help='Show help message')
         parser_help.set_defaults(func=self.print_help)
@@ -82,6 +98,29 @@ class CommandHandler:
     def generate_daily_report(self, args):
         self.report_generator.generate_daily_report(args.file)
         print(f"Generated daily report from file: {args.file}")
+
+    def generate_news_report(self, args):
+        """处理 news 命令
+        
+        Args:
+            args: 解析后的命令行参数（虽然 news 命令不需要参数，但为了保持一致性，仍需要接收）
+        """
+        try:
+            # 获取 HackerNews 故事
+            stories = self.hackernews_client.fetch_top_stories()
+
+            # 生成报告
+            report, report_file_path = self.report_generator.generate_hackernews_report(stories)
+
+            # 打印报告路径
+            print(f"HackerNews 报告已生成：{report_file_path}")
+
+            # 如果配置了通知，发送通知
+            if self.notifier:
+                self.notifier.notify("HackerNews", report)
+
+        except Exception as e:
+            print(f"生成 HackerNews 报告时发生错误：{e}")
 
     def print_help(self, args=None):
         self.parser.print_help()  # 输出帮助信息

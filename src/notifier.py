@@ -1,3 +1,4 @@
+import os
 import smtplib
 import markdown2
 from email.mime.text import MIMEText
@@ -23,12 +24,17 @@ class Notifier:
         
         # 将Markdown内容转换为HTML
         html_report = markdown2.markdown(report)
-
         msg.attach(MIMEText(html_report, 'html'))
+
         try:
+            # 优先使用配置文件中的密码，如果为空则从环境变量读取
+            password = self.email_settings.get('password') or os.getenv('EMAIL_PASSWORD')
+            if not password:
+                raise ValueError("未找到邮箱密码，请在配置文件或环境变量中设置")
+
             with smtplib.SMTP_SSL(self.email_settings['smtp_server'], self.email_settings['smtp_port']) as server:
                 LOG.debug("登录SMTP服务器")
-                server.login(msg['From'], self.email_settings['password'])
+                server.login(msg['From'], password)
                 server.sendmail(msg['From'], msg['To'], msg.as_string())
                 LOG.info("邮件发送成功！")
         except Exception as e:

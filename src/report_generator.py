@@ -4,38 +4,51 @@ import os
 from datetime import date, timedelta
 from logger import LOG  # 导入日志模块，用于记录日志信息
 
+
 class ReportGenerator:
     def __init__(self, llm):
         self.llm = llm  # 初始化时接受一个LLM实例，用于后续生成报告
 
-    def generate_daily_report(self, markdown_file_path):
-        # 读取Markdown文件并使用LLM生成日报
-        with open(markdown_file_path, 'r') as file:
-            markdown_content = file.read()
+    def generate_hackernews_report(self, stories):
+        """生成 HackerNews 报告并保存"""
+        # 生成报告
+        report = self.llm.generate_hackernews_report(stories)
 
-        report = self.llm.generate_daily_report(markdown_content)  # 调用LLM生成报告
+        # 创建保存目录
+        report_dir = "daily_progress/hackernews"
+        os.makedirs(report_dir, exist_ok=True)
 
-        report_file_path = os.path.splitext(markdown_file_path)[0] + "_report.md"
-        with open(report_file_path, 'w+') as report_file:
-            report_file.write(report)  # 写入生成的报告
+        # 生成文件名（使用当前日期）
+        from datetime import datetime
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        report_file_path = f"{report_dir}/{timestamp}_report.md"
 
-        LOG.info(f"GitHub 项目报告已保存到 {report_file_path}")
+        return self._get_report_by_path(
+            report_file_path, report, 'HackerNews 报告已保存到 '
+        )
 
+    def generate_github_report(self, raw_file_path, days):
+        """生成 GitHub 项目报告"""
+        with open(raw_file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+
+        report = self.llm.generate_daily_report(content)
+
+        # 生成报告文件路径
+        report_file_path = raw_file_path.replace('.md', '_report.md')
+
+        return self._get_report_by_path(
+            report_file_path, report, 'GitHub 项目报告已保存到 '
+        )
+
+    def _get_report_by_path(self, report_file_path, report, arg2):
+        with open(report_file_path, 'w', encoding='utf-8') as f:
+            f.write(report)
+        LOG.info(f"{arg2}{report_file_path}")
         return report, report_file_path
 
-
-    def generate_report_by_date_range(self, markdown_file_path, days):
-        # 生成特定日期范围的报告，流程与日报生成类似
-        with open(markdown_file_path, 'r') as file:
-            markdown_content = file.read()
-
-        report = self.llm.generate_daily_report(markdown_content)
-
-        report_file_path = os.path.splitext(markdown_file_path)[0] + f"_report.md"
-        with open(report_file_path, 'w+') as report_file:
-            report_file.write(report)
-        
-        LOG.info(f"GitHub 项目报告已保存到 {report_file_path}")
-
-        return report, report_file_path
-
+    def generate_report(self, source, data, days=None):
+        if source == "github":
+            return self.generate_github_report(data, days)
+        elif source == "hackernews":
+            return self.generate_hackernews_report(data)

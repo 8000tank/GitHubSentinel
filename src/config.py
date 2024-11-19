@@ -1,25 +1,50 @@
 import json
-import os
+from pathlib import Path
+
 
 class Config:
-    def __init__(self):
-        self.load_config()
-    
-    def load_config(self):
-        # 尝试从环境变量获取配置或使用 config.json 文件中的配置作为回退
-        with open('config.json', 'r') as f:
-            config = json.load(f)
-            
-            # 使用环境变量或配置文件的 GitHub Token
-            self.github_token = os.getenv('GITHUB_TOKEN', config.get('github_token'))
+    def __init__(self, config_path='config.json'):
+        try:
+            # 使用 Path 处理路径，更加健壮
+            config_file = Path(config_path)
+            if not config_file.exists():
+                raise FileNotFoundError(f"配置文件不存在: {config_path}")
 
-            # 初始化电子邮件设置
-            self.email = config.get('email', {})
-            # 使用环境变量或配置文件中的电子邮件密码
-            self.email['password'] = os.getenv('EMAIL_PASSWORD', self.email.get('password', ''))
+            with open(config_file, 'r', encoding='utf-8') as f:
+                self._config = json.load(f)
+        except json.JSONDecodeError as e:
+            raise ValueError(f"配置文件格式错误: {e}") from e
+        except Exception as e:
+            raise Exception(f"读取配置文件失败: {e}") from e
 
-            self.subscriptions_file = config.get('subscriptions_file')
-            # 默认每天执行
-            self.freq_days = config.get('github_progress_frequency_days', 1)
-            # 默认早上8点更新 (操作系统默认时区是 UTC +0，08点刚好对应北京时间凌晨12点)
-            self.exec_time = config.get('github_progress_execution_time', "08:00") 
+    @property
+    def github_token(self):
+        return self._config.get('github_token', '')
+
+    @property
+    def github_freq_days(self):
+        return self._config.get('github_progress_frequency_days', 1)
+
+    @property
+    def github_exec_time(self):
+        return self._config.get('github_progress_execution_time', '08:00')
+
+    @property
+    def hackernews_freq_days(self):
+        return self._config.get('hackernews_frequency_days', 1)
+
+    @property
+    def hackernews_exec_time(self):
+        return self._config.get('hackernews_execution_time', '08:00')
+
+    @property
+    def email(self):
+        return self._config.get('email', {})
+
+    @property
+    def slack_webhook_url(self):
+        return self._config.get('slack_webhook_url', '')
+
+    @property
+    def subscriptions_file(self):
+        return self._config.get('subscriptions_file', 'subscriptions.json')
